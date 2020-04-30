@@ -115,9 +115,9 @@ def check_submodules(directory: Path, ignore_missing_submodules: bool):
             raise RefusalToBuildException('\n'.join(message_pieces))
 
 def build(tag_timestamp: bool, push: bool, ignore_missing_submodules: bool, pretend: bool):
-    directory_of_this_script = Path(__file__).parent
-    docker_images = read_images(directory_of_this_script)
-    check_submodules(directory_of_this_script, ignore_missing_submodules)
+    base_directory = Path()
+    docker_images = read_images(base_directory)
+    check_submodules(base_directory, ignore_missing_submodules)
     timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
     images_to_push = []
     for label_base, filename in docker_images:

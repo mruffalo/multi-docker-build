@@ -114,7 +114,7 @@ def check_submodules(directory: Path, ignore_missing_submodules: bool):
         if not ignore_missing_submodules:
             raise RefusalToBuildException('\n'.join(message_pieces))
 
-def main(tag_timestamp: bool, push: bool, ignore_missing_submodules: bool, pretend: bool):
+def build(tag_timestamp: bool, push: bool, ignore_missing_submodules: bool, pretend: bool):
     directory_of_this_script = Path(__file__).parent
     docker_images = read_images(directory_of_this_script)
     check_submodules(directory_of_this_script, ignore_missing_submodules)
@@ -158,7 +158,7 @@ def main(tag_timestamp: bool, push: bool, ignore_missing_submodules: bool, prete
             ]
             print_run(docker_push_command, pretend)
 
-if __name__ == '__main__':
+def main():
     p = ArgumentParser()
     p.add_argument('--tag-timestamp', action='store_true')
     p.add_argument('--push', action='store_true')
@@ -167,7 +167,10 @@ if __name__ == '__main__':
     args = p.parse_args()
 
     try:
-        main(args.tag_timestamp, args.push, args.ignore_missing_submodules, args.pretend)
+        build(args.tag_timestamp, args.push, args.ignore_missing_submodules, args.pretend)
     except RefusalToBuildException as e:
         print(ERROR_COLOR + 'Refusing to build Docker containers, for reason:' + NO_COLOR)
         sys.exit(e.args[0])
+
+if __name__ == '__main__':
+    main()

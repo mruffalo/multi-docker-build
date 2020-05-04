@@ -34,7 +34,7 @@ with ``dev/Dockerfile`` containing::
   ...
 
 Since images are unconditionally built with the ``latest`` tag, first, then
-tagged with a timestamp if desired, ``Dockerfile``s need no modification for
+tagged with a timestamp if desired, no ``Dockerfile`` needs to be modified for
 a "release" image.
 
 The container build script checks for any uninitialized Git submodules, and

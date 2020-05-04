@@ -10,11 +10,20 @@ This file is tab-delimited, and lines starting with ``#`` are ignored.
 
 Each non-comment line in ``docker_images.txt`` is of the format::
 
-  label    path_to_Dockerfile
+  label    path/to/Dockerfile    comma,separated,options,if,desired
 
-(with a tab character between the label and the Dockerfile path, not the
-spaces above). Docker images will be built in sequence, so images can refer to
-the results of previous images, e.g.::
+(with a tab character between pieces, not the spaces above). By default, images
+will be built by running ``docker build -t label -f Dockerfile .`` in the parent
+directory of the Dockerfile. Add the option ``base_directory_build`` after the
+Dockerfile to specify that the image should be built with::
+
+  docker build -t label -f path/to/Dockerfile .
+
+in the directory containing ``docker_images.txt`` instead. If the default behavior
+is acceptable, the third tab-delimited piece of each line can be omitted.
+
+Docker images will be built in sequence, so images can refer to the results of
+previous images, e.g.::
 
   image-base    base/Dockerfile
   image-dev     dev/Dockerfile
@@ -23,6 +32,10 @@ with ``dev/Dockerfile`` containing::
 
   FROM image-base
   ...
+
+Since images are unconditionally built with the ``latest`` tag, first, then
+tagged with a timestamp if desired, ``Dockerfile``s need no modification for
+a "release" image.
 
 The container build script checks for any uninitialized Git submodules, and
 by default refuses to build if any are found. This can be overridden if

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-import json
 from argparse import ArgumentParser
 from datetime import datetime
 from pathlib import Path
 from subprocess import PIPE, run
 import sys
 from typing import List, Set, Tuple
+import warnings
 
 class RefusalToBuildException(Exception):
     pass
@@ -19,6 +19,10 @@ TIMESTAMP_FORMAT = '%Y%m%d-%H%M%S%z'
 
 # TODO: expand to other formats (JSON, YAML, CSV) in the future if necessary or appropriate
 IMAGE_LIST_FILENAME = 'docker_images.txt'
+
+BASE_DIR_BUILD_OPTION = 'base_directory_build'
+
+SUPPORTED_OPTIONS = frozenset({BASE_DIR_BUILD_OPTION})
 
 DOCKER = 'docker'
 DOCKER_BUILD_COMMAND_TEMPLATE: List[str] = [
@@ -65,27 +69,28 @@ def print_run(command: List[str], pretend: bool, return_stdout: bool=False, **kw
         if return_stdout:
             return proc.stdout.strip().decode('utf-8')
 
-def read_images(directory: Path) -> List[Tuple[str, Path]]:
+def read_images(directory: Path) -> List[Tuple[str, Path, Set[str]]]:
     """
     Reads an *ordered* list of Docker container/image information.
-    Looks for `IMAGE_LIST_FILENAME` ('docker_images.txt') in the
-    given directory, and reads tab-separated lines. Piece 0 is the
-    "base" name of the Docker container, without any tags, e.g.
-    'hubmap/codex-scripts', and piece 1 is the path to the matching
-    Dockerfile, relative to this directory.
+    Looks for 'docker_images.txt' in the given directory, and reads
+    tab-separated lines. Piece 0 is the "base" name of the Docker
+    container, without any tags, e.g. 'hubmap/codex-scripts', piece
+    1 is the path to the matching Dockerfile, relative to this
+    directory, and piece 2 is a string consisting of comma-separated
+    options for the build.
 
     Lines starting with '#' are ignored.
 
     :param directory: directory containing `IMAGE_LIST_FILENAME`
-    :return: List of (label, Dockerfile path) tuples
+    :return: List of (label, Dockerfile path, option set) tuples
     """
     images = []
     with open(directory / IMAGE_LIST_FILENAME) as f:
         for line in f:
             if line.startswith('#'):
                 continue
-            pieces = line.strip().split('\t')
-            images.append((pieces[0], Path(pieces[1])))
+            image, path, *rest = line.strip().split('\t')
+            images.append((image, Path(path), set(rest)))
     return images
 
 def check_submodules(directory: Path, ignore_missing_submodules: bool):
@@ -114,20 +119,35 @@ def check_submodules(directory: Path, ignore_missing_submodules: bool):
         if not ignore_missing_submodules:
             raise RefusalToBuildException('\n'.join(message_pieces))
 
+def check_options(options: Set[str]):
+    unknown_options = options - SUPPORTED_OPTIONS
+    if unknown_options:
+        option_str = ', '.join(sorted(unknown_options))
+        # TODO: decide whether this is an error
+        warnings.warn(f'Unsupported Docker option(s): {option_str}')
+
 def build(tag_timestamp: bool, push: bool, ignore_missing_submodules: bool, pretend: bool):
     base_directory = Path()
     docker_images = read_images(base_directory)
     check_submodules(base_directory, ignore_missing_submodules)
     timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
     images_to_push = []
-    for label_base, filename in docker_images:
+    for label_base, full_dockerfile_path, options in docker_images:
         label = f'{label_base}:latest'
-        base_dir = filename.parent
+        check_options(options)
+
+        # TODO: seriously reconsider this; it feels wrong
+        if BASE_DIR_BUILD_OPTION in options:
+            base_dir = Path()
+            dockerfile_path = full_dockerfile_path
+        else:
+            base_dir = full_dockerfile_path.parent
+            dockerfile_path = full_dockerfile_path.name
 
         docker_build_command = [
             piece.format(
                 label=label,
-                dockerfile_path=filename.name,
+                dockerfile_path=dockerfile_path,
             )
             for piece in DOCKER_BUILD_COMMAND_TEMPLATE
         ]

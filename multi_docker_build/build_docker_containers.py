@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from subprocess import PIPE, run
 import sys
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 import warnings
 
 class RefusalToBuildException(Exception):
@@ -126,7 +126,18 @@ def check_options(options: Set[str]):
         # TODO: decide whether this is an error
         warnings.warn(f'Unsupported Docker option(s): {option_str}')
 
-def build(tag_timestamp: bool, push: bool, ignore_missing_submodules: bool, pretend: bool):
+def tag_image(image_id: str, tag_name: str, pretend: bool):
+    docker_tag_command = [
+        piece.format(
+            image_id=image_id,
+            tag_name=tag_name,
+        )
+        for piece in DOCKER_TAG_COMMAND_TEMPLATE
+    ]
+    print_run(docker_tag_command, pretend)
+    print('Tagged image', image_id, 'as', tag_name)
+
+def build(tag_timestamp: bool, tag: Optional[str], push: bool, ignore_missing_submodules: bool, pretend: bool):
     base_directory = Path()
     docker_images = read_images(base_directory)
     check_submodules(base_directory, ignore_missing_submodules)
@@ -157,16 +168,13 @@ def build(tag_timestamp: bool, push: bool, ignore_missing_submodules: bool, pret
 
         if tag_timestamp:
             timestamp_tag_name = f'{label_base}:{timestamp}'
-            docker_tag_latest_command = [
-                piece.format(
-                    image_id=image_id,
-                    tag_name=timestamp_tag_name,
-                )
-                for piece in DOCKER_TAG_COMMAND_TEMPLATE
-            ]
-            print_run(docker_tag_latest_command, pretend)
-            print('Tagged image', image_id, 'as', timestamp_tag_name)
+            tag_image(image_id, timestamp_tag_name, pretend)
             images_to_push.append(timestamp_tag_name)
+
+        if tag is not None:
+            tag_name = f'{label_base}:{tag}'
+            tag_image(image_id, tag_name, pretend)
+            images_to_push.append(tag_name)
 
     if push:
         for image_id in images_to_push:
@@ -180,14 +188,49 @@ def build(tag_timestamp: bool, push: bool, ignore_missing_submodules: bool, pret
 
 def main():
     p = ArgumentParser()
-    p.add_argument('--tag-timestamp', action='store_true')
-    p.add_argument('--push', action='store_true')
-    p.add_argument('--ignore-missing-submodules', action='store_true')
-    p.add_argument('--pretend', action='store_true')
+    p.add_argument(
+        '--tag-timestamp',
+        action='store_true',
+        help="""
+            In addition to tagging images as "latest", also tag with a
+            timestamp in "YYYYMMDD-HHmmss" format. All images in "docker_images.txt"
+            are tagged with the same timestamp.
+        """,
+    )
+    p.add_argument(
+        '--tag',
+        help="""
+            In addition to tagging images as "latest", also tag with the tag name
+            provided. All images in "docker_images.txt" are tagged with the same tag name.
+        """,
+    )
+    p.add_argument(
+        '--push',
+        action='store_true',
+        help="""
+            Push all built containers to Docker Hub, tagged as "latest" and with any
+            additional tags specified via "--tag-timestamp" or "--tag=tag_name".
+        """,
+    )
+    p.add_argument(
+        '--ignore-missing-submodules',
+        action='store_true',
+        help="""
+            Allow building Docker containers if "git submodule" reports that at least
+            one submodule is uninitialized.            
+        """,
+    )
+    p.add_argument(
+        '--pretend',
+        action='store_true',
+        help="""
+            Run in pretend mode: don't actually execute anything (building, tagging, pushing).
+        """,
+    )
     args = p.parse_args()
 
     try:
-        build(args.tag_timestamp, args.push, args.ignore_missing_submodules, args.pretend)
+        build(args.tag_timestamp, args.tag, args.push, args.ignore_missing_submodules, args.pretend)
     except RefusalToBuildException as e:
         print(ERROR_COLOR + 'Refusing to build Docker containers, for reason:' + NO_COLOR)
         sys.exit(e.args[0])

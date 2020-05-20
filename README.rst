@@ -53,9 +53,16 @@ Options:
 --tag-timestamp  In addition to tagging images as ``latest``, also tag with a
                  timestamp in ``YYYYMMDD-HHmmss`` format. All images in
                  ``docker_images.txt`` are tagged with the same timestamp.
+                 Can be combined with ``--tag=tag_name``.
 
---push          Push all built containers to Docker Hub, both with ``latest``
-                tags and timestamp tags if ``--tag-timestamp`` is given.
+--tag=tag_name   In addition to tagging images as ``latest``, also tag with the
+                 tag name provided. All images in ``docker_images.txt`` are
+                 tagged with the same tag name. Can be combined with
+                 ``--tag-timestamp``.
+
+--push          Push all built containers to Docker Hub, tagged as ``latest``
+                and with any additional tags specified via ``--tag-timestamp``
+                or ``--tag=tag_name``.
 
 --ignore-missing-submodules  Allow building Docker containers if
                 ``git submodule`` reports that at least one submodule is

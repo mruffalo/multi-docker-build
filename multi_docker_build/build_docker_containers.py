@@ -90,7 +90,9 @@ def read_images(directory: Path) -> List[Tuple[str, Path, Set[str]]]:
             if line.startswith('#'):
                 continue
             image, path, *rest = line.strip().split('\t')
-            images.append((image, Path(path), set(rest)))
+            if rest:
+                options = set(rest[0].split(','))
+            images.append((image, Path(path), options))
     return images
 
 def check_submodules(directory: Path, ignore_missing_submodules: bool):

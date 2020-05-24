@@ -93,6 +93,8 @@ def read_images(directory: Path) -> List[Tuple[str, Path, Set[str]]]:
             image, path, *rest = line.strip().split('\t')
             if rest:
                 options = set(rest[0].split(','))
+            else:
+                options = set()
             images.append((image, Path(path), options))
     return images
 

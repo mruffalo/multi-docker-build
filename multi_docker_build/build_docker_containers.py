@@ -58,10 +58,11 @@ def print_run(command: List[str], pretend: bool, return_stdout: bool=False, **kw
         directory_piece = f' in directory "{kwargs["cwd"]}"'
     else:
         directory_piece = ''
-    print('Running "{}"{}'.format(' '.join(command), directory_piece))
     if pretend:
+        print('Would run "{}"{}'.format(' '.join(command), directory_piece))
         return '<pretend>'
     else:
+        print('Running "{}"{}'.format(' '.join(command), directory_piece))
         kwargs = kwargs.copy()
         if return_stdout:
             kwargs['stdout'] = PIPE

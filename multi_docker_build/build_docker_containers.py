@@ -74,7 +74,7 @@ def read_images(directory: Path) -> List[Tuple[str, Path, Set[str]]]:
     """
     Reads an *ordered* list of Docker container/image information.
     Looks for 'docker_images.txt' in the given directory, and reads
-    tab-separated lines. Piece 0 is the "base" name of the Docker
+    whitespace-separated lines. Piece 0 is the "base" name of the Docker
     container, without any tags, e.g. 'hubmap/codex-scripts', piece
     1 is the path to the matching Dockerfile, relative to this
     directory, and piece 2 is a string consisting of comma-separated
@@ -90,7 +90,7 @@ def read_images(directory: Path) -> List[Tuple[str, Path, Set[str]]]:
         for line in f:
             if line.startswith('#'):
                 continue
-            image, path, *rest = line.strip().split('\t')
+            image, path, *rest = line.strip().split()
             if rest:
                 options = set(rest[0].split(','))
             else:

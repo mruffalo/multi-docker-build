@@ -12,7 +12,7 @@ Each non-comment line in ``docker_images.txt`` is of the format::
 
   label    path/to/Dockerfile    comma,separated,options,if,desired
 
-(with a tab character between pieces, not the spaces above). By default, images
+(with arbitrary whitespace between pieces). By default, images
 will be built by running ``docker build -t label -f Dockerfile .`` in the parent
 directory of the Dockerfile. Add the option ``base_directory_build`` after the
 Dockerfile to specify that the image should be built with::

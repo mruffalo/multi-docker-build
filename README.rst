@@ -45,7 +45,7 @@ Usage
 -----
 
 The command-line entry point provided by this script is
-``build_docker_containers``. By default, images will be tagged with
+``build_docker_images``. By default, images will be tagged with
 ``:latest`` appended to the base image name.
 
 Options:

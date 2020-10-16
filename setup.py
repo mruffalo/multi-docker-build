@@ -34,7 +34,7 @@ setup(
     python_requires='>=3.6',
     entry_points={
         'console_scripts': [
-            'build_docker_containers=multi_docker_build.build_docker_containers:main',
+            'build_docker_images=multi_docker_build.build_docker_images:main',
         ],
     },
 )

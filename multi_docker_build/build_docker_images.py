@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from subprocess import PIPE, run
 import sys
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 import warnings
 
 class RefusalToBuildException(Exception):
@@ -21,8 +21,9 @@ TIMESTAMP_FORMAT = '%Y%m%d-%H%M%S%z'
 IMAGE_LIST_FILENAME = 'docker_images.txt'
 
 BASE_DIR_BUILD_OPTION = 'base_directory_build'
+GIT_REV_FILE_OPTION = 'write_git_revision'
 
-SUPPORTED_OPTIONS = frozenset({BASE_DIR_BUILD_OPTION})
+SUPPORTED_OPTIONS = frozenset({BASE_DIR_BUILD_OPTION, GIT_REV_FILE_OPTION})
 
 DOCKER = 'docker'
 DOCKER_BUILD_COMMAND_TEMPLATE: List[str] = [
@@ -52,6 +53,13 @@ GIT_SUBMODULE_STATUS_COMMAND: List[str] = [
     'submodule',
     'status',
 ]
+GIT_VERSION_COMMAND = [
+    'git',
+    'describe',
+    '--dirty',
+    '--always',
+    '--abbrev=12',
+]
 
 def print_run(command: List[str], pretend: bool, return_stdout: bool=False, **kwargs):
     if 'cwd' in kwargs:
@@ -70,7 +78,19 @@ def print_run(command: List[str], pretend: bool, return_stdout: bool=False, **kw
         if return_stdout:
             return proc.stdout.strip().decode('utf-8')
 
-def read_images(directory: Path) -> List[Tuple[str, Path, Set[str]]]:
+def write_git_version(cwd: Path, dest_path: Path):
+    try:
+        proc = run(GIT_VERSION_COMMAND, cwd=cwd, stdout=PIPE, check=True)
+        git_version = proc.stdout.decode('utf-8').strip()
+
+        print('Writing Git revision', git_version, 'to', dest_path)
+        with open(dest_path, 'w') as f:
+            print(git_version, file=f)
+    except Exception as e:
+        # don't care too much; this is best-effort
+        print('Caught', e)
+
+def read_images(directory: Path) -> List[Tuple[str, Path, Dict[str, Optional[str]]]]:
     """
     Reads an *ordered* list of Docker container/image information.
     Looks for 'docker_images.txt' in the given directory, and reads
@@ -91,10 +111,13 @@ def read_images(directory: Path) -> List[Tuple[str, Path, Set[str]]]:
             if line.startswith('#'):
                 continue
             image, path, *rest = line.strip().split()
+            options = {}
             if rest:
-                options = set(rest[0].split(','))
-            else:
-                options = set()
+                option_kv_list = rest[0].split(',')
+                for kv_str in option_kv_list:
+                    pieces = kv_str.split('=', 1)
+                    value = pieces[1] if len(pieces) == 2 else None
+                    options[pieces[0]] = value
             images.append((image, Path(path), options))
     return images
 
@@ -124,8 +147,8 @@ def check_submodules(directory: Path, ignore_missing_submodules: bool):
         if not ignore_missing_submodules:
             raise RefusalToBuildException('\n'.join(message_pieces))
 
-def check_options(options: Set[str]):
-    unknown_options = options - SUPPORTED_OPTIONS
+def check_options(options: Dict[str, Optional[str]]):
+    unknown_options = set(options) - SUPPORTED_OPTIONS
     if unknown_options:
         option_str = ', '.join(sorted(unknown_options))
         # TODO: decide whether this is an error
@@ -152,14 +175,17 @@ def build(tag_timestamp: bool, tag: Optional[str], push: bool, ignore_missing_su
         label = f'{label_base}:latest'
         check_options(options)
 
+        if GIT_REV_FILE_OPTION in options:
+            git_rev_file = Path(options[GIT_REV_FILE_OPTION])
+            write_git_version(base_directory, git_rev_file)
+
         # TODO: seriously reconsider this; it feels wrong
         if BASE_DIR_BUILD_OPTION in options:
-            base_dir = Path()
-            dockerfile_path = full_dockerfile_path
+            build_dir = Path()
         else:
-            base_dir = full_dockerfile_path.parent
-            dockerfile_path = full_dockerfile_path.name
+            build_dir = full_dockerfile_path.parent
 
+        dockerfile_path = full_dockerfile_path.relative_to(build_dir)
         docker_build_command = [
             piece.format(
                 label=label,
@@ -167,7 +193,7 @@ def build(tag_timestamp: bool, tag: Optional[str], push: bool, ignore_missing_su
             )
             for piece in DOCKER_BUILD_COMMAND_TEMPLATE
         ]
-        image_id = print_run(docker_build_command, pretend, return_stdout=True, cwd=base_dir)
+        image_id = print_run(docker_build_command, pretend, return_stdout=True, cwd=build_dir)
         images_to_push.append(label)
         print('Tagged image', image_id, 'as', label)
 

@@ -2,6 +2,7 @@
 from argparse import ArgumentParser
 from datetime import datetime
 from pathlib import Path
+import shlex
 from subprocess import PIPE, run
 import sys
 from typing import Dict, List, Optional, Set, Tuple
@@ -48,13 +49,14 @@ DOCKER_PUSH_COMMAND_TEMPLATE: List[str] = [
     '{image_id}',
 ]
 
+GIT = 'git'
 GIT_SUBMODULE_STATUS_COMMAND: List[str] = [
-    'git',
+    GIT,
     'submodule',
     'status',
 ]
 GIT_VERSION_COMMAND = [
-    'git',
+    GIT,
     'describe',
     '--dirty',
     '--always',
@@ -110,7 +112,7 @@ def read_images(directory: Path) -> List[Tuple[str, Path, Dict[str, Optional[str
         for line in f:
             if line.startswith('#'):
                 continue
-            image, path, *rest = line.strip().split()
+            image, path, *rest = shlex.split(line)
             options = {}
             if rest:
                 option_kv_list = rest[0].split(',')

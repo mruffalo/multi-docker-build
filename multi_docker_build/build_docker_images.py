@@ -22,9 +22,9 @@ TIMESTAMP_FORMAT = '%Y%m%d-%H%M%S%z'
 IMAGE_LIST_FILENAME = 'docker_images.txt'
 
 BASE_DIR_BUILD_OPTION = 'base_directory_build'
-GIT_REV_FILE_OPTION = 'write_git_revision'
+GIT_VERSION_FILE_OPTION = 'write_git_version'
 
-SUPPORTED_OPTIONS = frozenset({BASE_DIR_BUILD_OPTION, GIT_REV_FILE_OPTION})
+SUPPORTED_OPTIONS = frozenset({BASE_DIR_BUILD_OPTION, GIT_VERSION_FILE_OPTION})
 
 DOCKER = 'docker'
 DOCKER_BUILD_COMMAND_TEMPLATE: List[str] = [
@@ -85,7 +85,7 @@ def write_git_version(cwd: Path, dest_path: Path):
         proc = run(GIT_VERSION_COMMAND, cwd=cwd, stdout=PIPE, check=True)
         git_version = proc.stdout.decode('utf-8').strip()
 
-        print('Writing Git revision', git_version, 'to', dest_path)
+        print('Writing Git version', git_version, 'to', dest_path)
         with open(dest_path, 'w') as f:
             print(git_version, file=f)
     except Exception as e:
@@ -177,9 +177,9 @@ def build(tag_timestamp: bool, tag: Optional[str], push: bool, ignore_missing_su
         label = f'{label_base}:latest'
         check_options(options)
 
-        if GIT_REV_FILE_OPTION in options:
-            git_rev_file = Path(options[GIT_REV_FILE_OPTION])
-            write_git_version(base_directory, git_rev_file)
+        if GIT_VERSION_FILE_OPTION in options:
+            git_version_file = Path(options[GIT_VERSION_FILE_OPTION])
+            write_git_version(base_directory, git_version_file)
 
         # TODO: seriously reconsider this; it feels wrong
         if BASE_DIR_BUILD_OPTION in options:

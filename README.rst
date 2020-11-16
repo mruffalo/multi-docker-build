@@ -41,6 +41,11 @@ The container build script checks for any uninitialized Git submodules, and
 by default refuses to build if any are found. This can be overridden if
 desired (see below).
 
+The build option ``write_git_version`` accepts a file path argument, to which
+the output of ``git describe --dirty --always --abbrev=12`` is written. For example::
+
+  image_label    path/to/Dockerfile    write_git_version=src/revision.txt
+
 Usage
 -----
 

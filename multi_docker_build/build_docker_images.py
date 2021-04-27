@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+import json
 import shlex
 import sys
 import warnings
 from argparse import ArgumentParser
 from datetime import datetime
 from pathlib import Path
+from pprint import pprint
 from subprocess import PIPE, run
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -25,8 +27,15 @@ IMAGE_LIST_FILENAME = "docker_images.txt"
 
 BASE_DIR_BUILD_OPTION = "base_directory_build"
 GIT_VERSION_FILE_OPTION = "write_git_version"
+GIT_JSON_FILE_OPTION = "write_git_json"
 
-SUPPORTED_OPTIONS = frozenset({BASE_DIR_BUILD_OPTION, GIT_VERSION_FILE_OPTION})
+SUPPORTED_OPTIONS = frozenset(
+    {
+        BASE_DIR_BUILD_OPTION,
+        GIT_VERSION_FILE_OPTION,
+        GIT_JSON_FILE_OPTION,
+    }
+)
 
 DOCKER = "docker"
 DOCKER_BUILD_COMMAND_TEMPLATE: List[str] = [
@@ -57,12 +66,22 @@ GIT_SUBMODULE_STATUS_COMMAND: List[str] = [
     "submodule",
     "status",
 ]
-GIT_VERSION_COMMAND = [
+GIT_VERSION_COMMAND: List[str] = [
     GIT,
     "describe",
     "--dirty",
     "--always",
     "--abbrev=12",
+]
+GIT_BRANCH_COMMAND: List[str] = [
+    GIT,
+    "branch",
+    "--show-current",
+]
+GIT_REV_PARSE_COMMAND: List[str] = [
+    GIT,
+    "rev-parse",
+    "HEAD",
 ]
 
 
@@ -84,17 +103,44 @@ def print_run(command: List[str], pretend: bool, return_stdout: bool = False, **
             return proc.stdout.strip().decode("utf-8")
 
 
-def write_git_version(cwd: Path, dest_path: Path):
+def get_git_output(cwd: Path, command: List[str]) -> str:
     try:
-        proc = run(GIT_VERSION_COMMAND, cwd=cwd, stdout=PIPE, check=True)
-        git_version = proc.stdout.decode("utf-8").strip()
-
-        print("Writing Git version", git_version, "to", dest_path)
-        with open(dest_path, "w") as f:
-            print(git_version, file=f)
+        proc = run(command, cwd=cwd, stdout=PIPE, check=True)
+        output = proc.stdout.decode("utf-8").strip()
+        return output
     except Exception as e:
         # don't care too much; this is best-effort
         print("Caught", e)
+        return ""
+
+
+def get_git_info(cwd: Path) -> Dict[str, str]:
+    # 2-tuples: (key for JSON metadata, command to run)
+    commands = [
+        ("branch", GIT_BRANCH_COMMAND),
+        ("commit", GIT_REV_PARSE_COMMAND),
+        ("version", GIT_VERSION_COMMAND),
+    ]
+    git_info = {key: get_git_output(cwd, command) for key, command in commands}
+    print("Git information:")
+    pprint(git_info)
+    return git_info
+
+
+def write_git_version(cwd: Path, dest_path: Path):
+    # TODO: refactor
+    git_version = get_git_info(cwd)["version"]
+    print("Writing Git version", git_version, "to", dest_path)
+    with open(dest_path, "w") as f:
+        print(git_version, file=f)
+
+
+def write_git_info(cwd: Path, dest_path: Path):
+    # TODO: refactor
+    git_info = get_git_info(cwd)
+    print("Writing Git information to", dest_path)
+    with open(dest_path, "w") as f:
+        json.dump(git_info, f)
 
 
 def read_images(directory: Path) -> List[Tuple[str, Path, Dict[str, Optional[str]]]]:
@@ -152,10 +198,12 @@ def check_submodules(directory: Path, ignore_missing_submodules: bool):
         message_pieces = ["Found uninitialized submodules:"]
         for name, commit in sorted(uninitialized_submodules):
             message_pieces.append(f"\t{name} (at commit {commit})")
-        message_pieces.append("Maybe you need to run")
-        message_pieces.append("\tgit submodule update --init")
-        message_pieces.append(
-            "(Override with '--ignore-missing-submodules' if you're really sure.)"
+        message_pieces.extend(
+            [
+                "Maybe you need to run",
+                "\tgit submodule update --init",
+                "(Override with '--ignore-missing-submodules' if you're really sure.)",
+            ]
         )
 
         if not ignore_missing_submodules:
@@ -201,6 +249,10 @@ def build(
         if GIT_VERSION_FILE_OPTION in options:
             git_version_file = Path(options[GIT_VERSION_FILE_OPTION])
             write_git_version(base_directory, git_version_file)
+
+        if GIT_JSON_FILE_OPTION in options:
+            git_json_file = Path(options[GIT_JSON_FILE_OPTION])
+            write_git_info(base_directory, git_json_file)
 
         # TODO: seriously reconsider this; it feels wrong
         if BASE_DIR_BUILD_OPTION in options:

@@ -1,96 +1,101 @@
 #!/usr/bin/env python3
+import shlex
+import sys
+import warnings
 from argparse import ArgumentParser
 from datetime import datetime
 from pathlib import Path
-import shlex
 from subprocess import PIPE, run
-import sys
 from typing import Dict, List, Optional, Set, Tuple
-import warnings
+
 
 class RefusalToBuildException(Exception):
     pass
 
-ERROR_COLOR = '\033[01;31m'
-NO_COLOR = '\033[00m'
+
+ERROR_COLOR = "\033[01;31m"
+NO_COLOR = "\033[00m"
 
 # Would like to include timezone offset, but not worth the
 # complexity of including pytz/etc.
-TIMESTAMP_FORMAT = '%Y%m%d-%H%M%S%z'
+TIMESTAMP_FORMAT = "%Y%m%d-%H%M%S%z"
 
 # TODO: expand to other formats (JSON, YAML, CSV) in the future if necessary or appropriate
-IMAGE_LIST_FILENAME = 'docker_images.txt'
+IMAGE_LIST_FILENAME = "docker_images.txt"
 
-BASE_DIR_BUILD_OPTION = 'base_directory_build'
-GIT_VERSION_FILE_OPTION = 'write_git_version'
+BASE_DIR_BUILD_OPTION = "base_directory_build"
+GIT_VERSION_FILE_OPTION = "write_git_version"
 
 SUPPORTED_OPTIONS = frozenset({BASE_DIR_BUILD_OPTION, GIT_VERSION_FILE_OPTION})
 
-DOCKER = 'docker'
+DOCKER = "docker"
 DOCKER_BUILD_COMMAND_TEMPLATE: List[str] = [
     DOCKER,
-    'build',
-    '-q',
-    '-t',
-    '{label}',
-    '-f',
-    '{dockerfile_path}',
-    '.',
+    "build",
+    "-q",
+    "-t",
+    "{label}",
+    "-f",
+    "{dockerfile_path}",
+    ".",
 ]
 DOCKER_TAG_COMMAND_TEMPLATE: List[str] = [
     DOCKER,
-    'tag',
-    '{image_id}',
-    '{tag_name}',
+    "tag",
+    "{image_id}",
+    "{tag_name}",
 ]
 DOCKER_PUSH_COMMAND_TEMPLATE: List[str] = [
     DOCKER,
-    'push',
-    '{image_id}',
+    "push",
+    "{image_id}",
 ]
 
-GIT = 'git'
+GIT = "git"
 GIT_SUBMODULE_STATUS_COMMAND: List[str] = [
     GIT,
-    'submodule',
-    'status',
+    "submodule",
+    "status",
 ]
 GIT_VERSION_COMMAND = [
     GIT,
-    'describe',
-    '--dirty',
-    '--always',
-    '--abbrev=12',
+    "describe",
+    "--dirty",
+    "--always",
+    "--abbrev=12",
 ]
 
-def print_run(command: List[str], pretend: bool, return_stdout: bool=False, **kwargs):
-    if 'cwd' in kwargs:
+
+def print_run(command: List[str], pretend: bool, return_stdout: bool = False, **kwargs):
+    if "cwd" in kwargs:
         directory_piece = f' in directory "{kwargs["cwd"]}"'
     else:
-        directory_piece = ''
+        directory_piece = ""
     if pretend:
-        print('Would run "{}"{}'.format(' '.join(command), directory_piece))
-        return '<pretend>'
+        print('Would run "{}"{}'.format(" ".join(command), directory_piece))
+        return "<pretend>"
     else:
-        print('Running "{}"{}'.format(' '.join(command), directory_piece))
+        print('Running "{}"{}'.format(" ".join(command), directory_piece))
         kwargs = kwargs.copy()
         if return_stdout:
-            kwargs['stdout'] = PIPE
+            kwargs["stdout"] = PIPE
         proc = run(command, check=True, **kwargs)
         if return_stdout:
-            return proc.stdout.strip().decode('utf-8')
+            return proc.stdout.strip().decode("utf-8")
+
 
 def write_git_version(cwd: Path, dest_path: Path):
     try:
         proc = run(GIT_VERSION_COMMAND, cwd=cwd, stdout=PIPE, check=True)
-        git_version = proc.stdout.decode('utf-8').strip()
+        git_version = proc.stdout.decode("utf-8").strip()
 
-        print('Writing Git version', git_version, 'to', dest_path)
-        with open(dest_path, 'w') as f:
+        print("Writing Git version", git_version, "to", dest_path)
+        with open(dest_path, "w") as f:
             print(git_version, file=f)
     except Exception as e:
         # don't care too much; this is best-effort
-        print('Caught', e)
+        print("Caught", e)
+
 
 def read_images(directory: Path) -> List[Tuple[str, Path, Dict[str, Optional[str]]]]:
     """
@@ -110,51 +115,60 @@ def read_images(directory: Path) -> List[Tuple[str, Path, Dict[str, Optional[str
     images = []
     with open(directory / IMAGE_LIST_FILENAME) as f:
         for line in f:
-            if line.startswith('#'):
+            if line.startswith("#"):
                 continue
             image, path, *rest = shlex.split(line)
             options = {}
             if rest:
-                option_kv_list = rest[0].split(',')
+                option_kv_list = rest[0].split(",")
                 for kv_str in option_kv_list:
-                    pieces = kv_str.split('=', 1)
+                    pieces = kv_str.split("=", 1)
                     value = pieces[1] if len(pieces) == 2 else None
                     options[pieces[0]] = value
             images.append((image, Path(path), options))
     return images
 
+
 def check_submodules(directory: Path, ignore_missing_submodules: bool):
-    submodule_status_output = run(
-        GIT_SUBMODULE_STATUS_COMMAND,
-        stdout=PIPE,
-        cwd=directory,
-    ).stdout.decode('utf-8').splitlines()
+    submodule_status_output = (
+        run(
+            GIT_SUBMODULE_STATUS_COMMAND,
+            stdout=PIPE,
+            cwd=directory,
+        )
+        .stdout.decode("utf-8")
+        .splitlines()
+    )
 
     # name, commit
     uninitialized_submodules: Set[Tuple[str, str]] = set()
 
     for line in submodule_status_output:
         status_code, pieces = line[0], line[1:].split()
-        if status_code == '-':
+        if status_code == "-":
             uninitialized_submodules.add((pieces[1], pieces[0]))
 
     if uninitialized_submodules:
-        message_pieces = ['Found uninitialized submodules:']
+        message_pieces = ["Found uninitialized submodules:"]
         for name, commit in sorted(uninitialized_submodules):
-            message_pieces.append(f'\t{name} (at commit {commit})')
+            message_pieces.append(f"\t{name} (at commit {commit})")
         message_pieces.append("Maybe you need to run")
         message_pieces.append("\tgit submodule update --init")
-        message_pieces.append("(Override with '--ignore-missing-submodules' if you're really sure.)")
+        message_pieces.append(
+            "(Override with '--ignore-missing-submodules' if you're really sure.)"
+        )
 
         if not ignore_missing_submodules:
-            raise RefusalToBuildException('\n'.join(message_pieces))
+            raise RefusalToBuildException("\n".join(message_pieces))
+
 
 def check_options(options: Dict[str, Optional[str]]):
     unknown_options = set(options) - SUPPORTED_OPTIONS
     if unknown_options:
-        option_str = ', '.join(sorted(unknown_options))
+        option_str = ", ".join(sorted(unknown_options))
         # TODO: decide whether this is an error
-        warnings.warn(f'Unsupported Docker option(s): {option_str}')
+        warnings.warn(f"Unsupported Docker option(s): {option_str}")
+
 
 def tag_image(image_id: str, tag_name: str, pretend: bool):
     docker_tag_command = [
@@ -165,16 +179,23 @@ def tag_image(image_id: str, tag_name: str, pretend: bool):
         for piece in DOCKER_TAG_COMMAND_TEMPLATE
     ]
     print_run(docker_tag_command, pretend)
-    print('Tagged image', image_id, 'as', tag_name)
+    print("Tagged image", image_id, "as", tag_name)
 
-def build(tag_timestamp: bool, tag: Optional[str], push: bool, ignore_missing_submodules: bool, pretend: bool):
+
+def build(
+    tag_timestamp: bool,
+    tag: Optional[str],
+    push: bool,
+    ignore_missing_submodules: bool,
+    pretend: bool,
+):
     base_directory = Path()
     docker_images = read_images(base_directory)
     check_submodules(base_directory, ignore_missing_submodules)
     timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
     images_to_push = []
     for label_base, full_dockerfile_path, options in docker_images:
-        label = f'{label_base}:latest'
+        label = f"{label_base}:latest"
         check_options(options)
 
         if GIT_VERSION_FILE_OPTION in options:
@@ -197,15 +218,15 @@ def build(tag_timestamp: bool, tag: Optional[str], push: bool, ignore_missing_su
         ]
         image_id = print_run(docker_build_command, pretend, return_stdout=True, cwd=build_dir)
         images_to_push.append(label)
-        print('Tagged image', image_id, 'as', label)
+        print("Tagged image", image_id, "as", label)
 
         if tag_timestamp:
-            timestamp_tag_name = f'{label_base}:{timestamp}'
+            timestamp_tag_name = f"{label_base}:{timestamp}"
             tag_image(image_id, timestamp_tag_name, pretend)
             images_to_push.append(timestamp_tag_name)
 
         if tag is not None:
-            tag_name = f'{label_base}:{tag}'
+            tag_name = f"{label_base}:{tag}"
             tag_image(image_id, tag_name, pretend)
             images_to_push.append(tag_name)
 
@@ -219,11 +240,12 @@ def build(tag_timestamp: bool, tag: Optional[str], push: bool, ignore_missing_su
             ]
             print_run(docker_push_command, pretend)
 
+
 def main():
     p = ArgumentParser()
     p.add_argument(
-        '--tag-timestamp',
-        action='store_true',
+        "--tag-timestamp",
+        action="store_true",
         help="""
             In addition to tagging images as "latest", also tag with a
             timestamp in "YYYYMMDD-HHmmss" format. All images in "docker_images.txt"
@@ -231,31 +253,31 @@ def main():
         """,
     )
     p.add_argument(
-        '--tag',
+        "--tag",
         help="""
             In addition to tagging images as "latest", also tag with the tag name
             provided. All images in "docker_images.txt" are tagged with the same tag name.
         """,
     )
     p.add_argument(
-        '--push',
-        action='store_true',
+        "--push",
+        action="store_true",
         help="""
             Push all built containers to Docker Hub, tagged as "latest" and with any
             additional tags specified via "--tag-timestamp" or "--tag=tag_name".
         """,
     )
     p.add_argument(
-        '--ignore-missing-submodules',
-        action='store_true',
+        "--ignore-missing-submodules",
+        action="store_true",
         help="""
             Allow building Docker containers if "git submodule" reports that at least
             one submodule is uninitialized.            
         """,
     )
     p.add_argument(
-        '--pretend',
-        action='store_true',
+        "--pretend",
+        action="store_true",
         help="""
             Run in pretend mode: don't actually execute anything (building, tagging, pushing).
         """,
@@ -263,10 +285,13 @@ def main():
     args = p.parse_args()
 
     try:
-        build(args.tag_timestamp, args.tag, args.push, args.ignore_missing_submodules, args.pretend)
+        build(
+            args.tag_timestamp, args.tag, args.push, args.ignore_missing_submodules, args.pretend
+        )
     except RefusalToBuildException as e:
-        print(ERROR_COLOR + 'Refusing to build Docker containers, for reason:' + NO_COLOR)
+        print(ERROR_COLOR + "Refusing to build Docker containers, for reason:" + NO_COLOR)
         sys.exit(e.args[0])
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

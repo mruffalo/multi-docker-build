@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import re
 import shlex
 import sys
 import warnings
@@ -17,6 +18,8 @@ class RefusalToBuildException(Exception):
 
 ERROR_COLOR = "\033[01;31m"
 NO_COLOR = "\033[00m"
+
+VERSION_NUMBER_PATTERN = re.compile(r"v(\d[\d\.]+.*)")
 
 # Would like to include timezone offset, but not worth the
 # complexity of including pytz/etc.
@@ -101,6 +104,31 @@ def print_run(command: List[str], pretend: bool, return_stdout: bool = False, **
         proc = run(command, check=True, **kwargs)
         if return_stdout:
             return proc.stdout.strip().decode("utf-8")
+
+
+def strip_v_from_version_number(tag: str) -> str:
+    """
+    :param tag: Tag name, with or without a leading 'v'
+    :return: If a numeric version, strips one leading 'v' character. Otherwise
+      `tag` is returned unchanged.
+
+    >>> strip_v_from_version_number('v0.1')
+    '0.1'
+    >>> strip_v_from_version_number('v00..00')
+    '00..00'
+    >>> strip_v_from_version_number('v1.0-rc1')
+    '1.0-rc1'
+    >>> strip_v_from_version_number('version which should not change')
+    'version which should not change'
+    >>> strip_v_from_version_number('v.00..00')
+    'v.00..00'
+    """
+    # TODO: consider requiring Python 3.8 for this
+    m = VERSION_NUMBER_PATTERN.match(tag)
+    if m:
+        return m.group(1)
+    else:
+        return tag
 
 
 def get_git_output(cwd: Path, command: List[str]) -> str:
@@ -232,6 +260,7 @@ def tag_image(image_id: str, tag_name: str, pretend: bool):
 
 def build(
     tag_timestamp: bool,
+    tag_git_describe: bool,
     tag: Optional[str],
     push: bool,
     ignore_missing_submodules: bool,
@@ -277,6 +306,13 @@ def build(
             tag_image(image_id, timestamp_tag_name, pretend)
             images_to_push.append(timestamp_tag_name)
 
+        if tag_git_describe:
+            git_version = get_git_output(build_dir, GIT_VERSION_COMMAND)
+            version_without_v = strip_v_from_version_number(git_version)
+            version_tag_name = f"{label_base}:{version_without_v}"
+            tag_image(image_id, version_tag_name, pretend)
+            images_to_push.append(version_tag_name)
+
         if tag is not None:
             tag_name = f"{label_base}:{tag}"
             tag_image(image_id, tag_name, pretend)
@@ -312,6 +348,15 @@ def main():
         """,
     )
     p.add_argument(
+        "--tag-git-describe",
+        action="store_true",
+        help="""
+            In addition to tagging images as "latest", also tag with the output of
+            `git describe --dirty --always --abbrev=12`. All images in "docker_images.txt"
+            are tagged with the same Git tag.
+        """,
+    )
+    p.add_argument(
         "--push",
         action="store_true",
         help="""
@@ -338,7 +383,12 @@ def main():
 
     try:
         build(
-            args.tag_timestamp, args.tag, args.push, args.ignore_missing_submodules, args.pretend
+            tag_timestamp=args.tag_timestamp,
+            tag_git_describe=args.tag_git_describe,
+            tag=args.tag,
+            push=args.push,
+            ignore_missing_submodules=args.ignore_missing_submodules,
+            pretend=args.pretend,
         )
     except RefusalToBuildException as e:
         print(ERROR_COLOR + "Refusing to build Docker containers, for reason:" + NO_COLOR)

@@ -11,7 +11,7 @@ with open(here / "README.rst", encoding="utf-8") as f:
 
 setup(
     name="multi-docker-build",
-    version="0.7",
+    version="0.7.1",
     description="Automated building/tagging/pushing of multiple Docker images in succession",
     long_description=long_description,
     url="https://github.com/mruffalo/multi-docker-build",

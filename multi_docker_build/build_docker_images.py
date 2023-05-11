@@ -31,12 +31,14 @@ IMAGE_LIST_FILENAME = "docker_images.txt"
 BASE_DIR_BUILD_OPTION = "base_directory_build"
 GIT_VERSION_FILE_OPTION = "write_git_version"
 GIT_JSON_FILE_OPTION = "write_git_json"
+PLATFORMS_OPTION = "platforms"
 
 SUPPORTED_OPTIONS = frozenset(
     {
         BASE_DIR_BUILD_OPTION,
         GIT_VERSION_FILE_OPTION,
         GIT_JSON_FILE_OPTION,
+        PLATFORMS_OPTION,
     }
 )
 
@@ -297,6 +299,11 @@ def build(
             )
             for piece in DOCKER_BUILD_COMMAND_TEMPLATE
         ]
+
+        if PLATFORMS_OPTION in options:
+            platforms_str = ",".join(options[PLATFORMS_OPTION].split("&"))
+            docker_build_command.append(f"--platform={platforms_str}")
+
         image_id = print_run(docker_build_command, pretend, return_stdout=True, cwd=build_dir)
         images_to_push.append(label)
         print("Tagged image", image_id, "as", label)

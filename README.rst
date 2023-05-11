@@ -49,6 +49,15 @@ the output of ``git describe --dirty --always --abbrev=12`` is written. For exam
 
   image_label    path/to/Dockerfile    write_git_version=src/revision.txt
 
+
+Cross-platform builds
+---------------------
+
+The build option ``platforms`` accepts a ``&``-delimited list of platforms, which
+will be passed directly to ``docker build --platforms=...``, with ``&`` replaced by
+``,`` in the ``docker build`` invocation. Note that this may require usage of the
+newer ``buildx`` tool, replacing the legacy ``docker build``.
+
 Usage
 -----
 
